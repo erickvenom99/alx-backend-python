@@ -7,7 +7,7 @@ import asyncio
 import random
 
 
-async def wait_random(max_delay=10):
+async def wait_random(max_delay: int = 10) -> float:
     """
         funtion is an asychronous coroutine
         Args:
