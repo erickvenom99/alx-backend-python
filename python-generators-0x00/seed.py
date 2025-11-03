@@ -66,7 +66,6 @@ def connect_to_prodev():
             database=os.getenv('DB_NAME')
         )
         if connection.is_connected():
-            print("Connected to ALX_prodev database")
             return connection
     except Error as e:
         print(f"Error connecting to ALX_prodev: {e}")
