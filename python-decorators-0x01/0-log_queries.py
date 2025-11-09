@@ -8,6 +8,7 @@ import sqlite3
 import functools
 import sys
 from typing import Callable, Any
+from datetime import datetime
 
 
 def log_queries(func: Callable) -> Callable:
@@ -31,8 +32,9 @@ def log_queries(func: Callable) -> Callable:
 
         # Log it
         if query:
-            print(f"[SQL LOG] Executing query: {query}", file=sys.stderr)
-
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            print(f"[{timestamp}] [SQL LOG] Executing query: {query}", file=sys.stderr)
+            
         # Run the original function
         return func(*args, **kwargs)
 
