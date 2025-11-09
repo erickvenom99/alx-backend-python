@@ -16,7 +16,7 @@ class ExecuteQuery:
         param: Any - parameter for the query
     Return: list of result
     """
-    def __init__(self, db_name: str, query: str, param: Any = None):
+    def __init__(self, query: str, db_name: str = "users.db", param: Any = None):
         self.db_name = db_name
         self.query = query
         self.param = (param,) if param is not None else ()
@@ -50,3 +50,22 @@ class ExecuteQuery:
             except Exception:
                 pass
         return False
+
+if __name__ == "__main__":
+    # Ensure this is the correct DB name
+    DB_NAME = 'users.db' 
+    
+    required_query = "SELECT * FROM users WHERE age > ?"
+    required_param = 25
+    
+    print("\n--- Testing ExecuteQuery Context Manager ---", file=sys.stderr)
+    
+    # FIX: Swap DB_NAME and required_query
+    # Argument order: (query, db_name, param)
+    with ExecuteQuery(required_query, DB_NAME, required_param) as users_filtered:
+        print(f"Executing Query: {required_query} with parameter {required_param}", file=sys.stderr)
+        
+        # Display results
+        print("\nQuery Results:")
+        for user in users_filtered:
+            print(user)
