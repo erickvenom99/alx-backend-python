@@ -12,7 +12,7 @@ import requests
 
 
 class TestGithubOrgClient(unittest.TestCase):
-    """ """
+    """Unit test suite for the GithubOrgClient class. """
     @parameterized.expand([
         ("google", {"repos_url": ""}),
         ("abc", {"repos_url": ""}),
