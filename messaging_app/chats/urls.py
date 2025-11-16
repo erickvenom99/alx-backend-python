@@ -3,7 +3,7 @@ from django.urls import path, include
 from rest_framework import routers  # ← "routers" appears
 from .views import ConversationViewSet, MessageViewSet
 
-# This line contains: routers.DefaultRouter()
+# routers.DefaultRouter()
 router = routers.DefaultRouter()
 
 # Register ViewSets
