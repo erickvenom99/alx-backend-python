@@ -48,40 +48,30 @@ class ConversationViewSet(viewsets.ViewSet):
 
 class MessageViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['sent_at', 'sender__email']
-    search_fields = ['message_body']
-    ordering_fields = ['sent_at']
-    ordering = ['sent_at']
 
-    def get_conversation(self, conversation_id):
+    def get_conversation(self):
+        conversation_id = self.kwargs.get('conversation_pk')
         conversation = get_object_or_404(Conversation, conversation_id=conversation_id)
         if not conversation.participants.filter(user_id=self.request.user.user_id).exists():
             raise PermissionDenied("Not in conversation.")
         return conversation
 
-    def list(self, request):
-        # DefaultRouter doesn't pass conversation_id → list all messages for user
-        messages = Message.objects.filter(
-            conversation__participants=request.user
-        ).select_related('sender', 'conversation').order_by('sent_at')
+    def list(self, request, conversation_pk=None):
+        conversation = self.get_conversation()
+        messages = conversation.messages.select_related('sender').order_by('sent_at')
         messages = self.filter_queryset(messages)
         serializer = MessageSerializer(messages, many=True)
         return Response(serializer.data)
 
-    def create(self, request):
-        # Expect conversation_id in POST data
-        conversation_id = request.data.get('conversation')
-        if not conversation_id:
-            return Response({"conversation": "This field is required."}, status=400)
-
-        conversation = self.get_conversation(conversation_id)
+    def create(self, request, conversation_pk=None):
+        conversation = self.get_conversation()
         data = request.data.copy()
         data['sender_id'] = request.user.user_id
+        data['conversation'] = conversation.conversation_id
 
         serializer = MessageSerializer(data=data, context={
             'request': request,
-            'conversation_id': conversation_id
+            'conversation_id': conversation.conversation_id
         })
         if serializer.is_valid():
             message = serializer.save()

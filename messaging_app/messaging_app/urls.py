@@ -4,6 +4,6 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    # Include router URLs under /api/
-    path('api/', include('chats.urls')),
+    path('api-auth/', include('rest_framework.urls')),  # ← "api-auth"
+    path('api/', include('chats.urls')),  # ← "api/"
 ]
