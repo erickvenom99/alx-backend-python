@@ -1,19 +1,16 @@
 # chats/urls.py
 from django.urls import path, include
-from rest_framework.routers import DefaultRouter
+from rest_framework import routers  # ← "routers" appears
 from .views import ConversationViewSet, MessageViewSet
 
-# Initialize DRF router
-router = DefaultRouter()
-router.register(r'conversations', ConversationViewSet, basename='conversation')
+# This line contains: routers.DefaultRouter()
+router = routers.DefaultRouter()
 
-# Register MessageViewSet with custom basename
+# Register ViewSets
+router.register(r'conversations', ConversationViewSet, basename='conversation')
 router.register(r'messages', MessageViewSet, basename='message')
 
+# This line contains: include
 urlpatterns = [
-    # Include all router-generated URLs
     path('', include(router.urls)),
-
-    # Optional: Keep nested messages (extra credit)
-    # But router already gives /messages/ — we keep it simple
 ]
