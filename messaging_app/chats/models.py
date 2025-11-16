@@ -39,7 +39,7 @@ class User(AbstractUser):
         null=False
     )
     created_at = models.DateTimeField(auto_now_add=True)
-
+    password = models.CharField(max_length=128, blank=False, null=False)
     groups = models.ManyToManyField(
         Group,
         related_name='chats_user_set',  # ← Unique name
