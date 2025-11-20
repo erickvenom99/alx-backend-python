@@ -1,9 +1,7 @@
 # chats/serializers.py
 from rest_framework import serializers
+# Using direct import as requested and defined in AUTH_USER_MODEL setup
 from .models import User, Conversation, Message, ConversationParticipant
-from django.contrib.auth import get_user_model
-
-User = get_user_model()  # Safely get custom User model
 
 
 # ------------------------------------------------------------------
@@ -12,14 +10,14 @@ User = get_user_model()  # Safely get custom User model
 class UserSerializer(serializers.ModelSerializer):
     """
     Serializes User model.
-    Used in Conversation.participants and Message.sender.
+    NOTE: Uses 'id' as the primary key field, matching models.py.
     """
     full_name = serializers.CharField(source='get_full_name', read_only=True)
 
     class Meta:
         model = User
         fields = [
-            'user_id',
+            'id', # CRITICAL FIX: Use 'id' to match the models.py UUIDField
             'email',
             'first_name',
             'last_name',
@@ -28,7 +26,7 @@ class UserSerializer(serializers.ModelSerializer):
             'role',
             'created_at',
         ]
-        read_only_fields = ['user_id', 'created_at', 'full_name']
+        read_only_fields = ['id', 'created_at', 'full_name']
 
 
 # ------------------------------------------------------------------
@@ -38,66 +36,35 @@ class MessageSerializer(serializers.ModelSerializer):
     """
     Serializes Message model.
     Includes sender as nested User object.
+    The sender and conversation fields are set automatically by the ViewSet.
     """
     sender = UserSerializer(read_only=True)
-    sender_id = serializers.UUIDField(write_only=True)  # For creating
+    # Removed sender_id field as the ViewSet uses request.user directly for sender
 
     class Meta:
         model = Message
         fields = [
             'message_id',
             'sender',
-            'sender_id',
-            'conversation',  # write-only
+            'conversation',  # write-only (set by ViewSet URL context)
             'message_body',
             'sent_at',
         ]
-        read_only_fields = ['message_id', 'sent_at', 'sender']
-        extra_kwargs = {
-            'conversation': {'write_only': True},
-        }
-
-    def validate_sender_id(self, value):
-        """Ensure sender exists and is in the conversation."""
-        request = self.context.get('request')
-        if not request or not request.user.is_authenticated:
-            raise serializers.ValidationError("Authentication required.")
-
-        conversation_id = self.context.get('conversation_id')
-        if not conversation_id:
-            raise serializers.ValidationError("Conversation context missing.")
-
-        try:
-            conversation = Conversation.objects.get(conversation_id=conversation_id)
-        except Conversation.DoesNotExist:
-            raise serializers.ValidationError("Conversation does not exist.")
-
-        # Check if sender is participant
-        if not conversation.participants.filter(user_id=value).exists():
-            raise serializers.ValidationError("Sender is not in this conversation.")
-
-        return value
-
-    def create(self, validated_data):
-        """Set sender from request.user after validation."""
-        request = self.context.get('request')
-        validated_data['sender'] = request.user
-        return super().create(validated_data)
-
+        read_only_fields = ['conversation', 'sender', 'timestamp']
+        
+    
+    # Removed redundant validation/create methods as the ViewSet's perform_create is sufficient
 
 # ------------------------------------------------------------------
-# 3. CONVERSATION SERIALIZER
+# 3. CONVERSATION SERIALIZER (Read/Detail)
 # ------------------------------------------------------------------
 class ConversationSerializer(serializers.ModelSerializer):
     """
-    Serializes Conversation model.
-    Includes:
-      - participants: list of User objects
-      - messages: list of Message objects (latest first)
-      - participant_count
+    Serializes Conversation model for reading/listing.
     """
     participants = UserSerializer(many=True, read_only=True)
-    messages = MessageSerializer(many=True, read_only=True, source='messages')
+    # Use a SerializerMethodField to control message fetching
+    latest_messages = serializers.SerializerMethodField()
     participant_count = serializers.SerializerMethodField()
 
     class Meta:
@@ -106,13 +73,18 @@ class ConversationSerializer(serializers.ModelSerializer):
             'conversation_id',
             'participants',
             'participant_count',
-            'messages',
+            'latest_messages',
             'created_at',
         ]
         read_only_fields = ['conversation_id', 'created_at']
 
     def get_participant_count(self, obj):
         return obj.participants.count()
+    
+    def get_latest_messages(self, obj):
+        # Fetch up to the 10 most recent messages for the list view
+        messages = obj.messages.all().order_by('-sent_at')[:10]
+        return MessageSerializer(messages, many=True).data
 
 
 # ------------------------------------------------------------------
@@ -120,46 +92,61 @@ class ConversationSerializer(serializers.ModelSerializer):
 # ------------------------------------------------------------------
 class ConversationCreateSerializer(serializers.ModelSerializer):
     """
-    Used to create a new conversation.
-    Accepts list of participant user_ids (including creator).
+    Handles creation of a conversation, validating participant emails.
     """
-    participant_ids = serializers.ListField(
-        child=serializers.UUIDField(),
+    participant_emails = serializers.ListField(
+        child=serializers.EmailField(),
         write_only=True,
-        min_length=2,
-        max_length=50
+        min_length=1,
+        max_length=50,
+        help_text="List of participant emails (excluding your own)."
     )
+    
+    # CRITICAL FIX: Include conversation_id so the API response returns the ID
+    conversation_id = serializers.UUIDField(read_only=True)
 
     class Meta:
         model = Conversation
-        fields = ['conversation_id', 'participant_ids', 'created_at']
-        read_only_fields = ['conversation_id', 'created_at']
+        # Include the ID in the response
+        fields = ['conversation_id', 'participant_emails'] 
 
-    def validate_participant_ids(self, value):
-        """Ensure all IDs exist and no duplicates."""
-        if len(value) != len(set(value)):
-            raise serializers.ValidationError("Duplicate participant IDs.")
+    def validate_participant_emails(self, emails):
+        if len(set(emails)) != len(emails):
+            raise serializers.ValidationError("Duplicate emails not allowed.")
+        
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            raise serializers.ValidationError("Authentication required to create a conversation.")
 
-        users = User.objects.filter(user_id__in=value)
-        if users.count() != len(value):
-            raise serializers.ValidationError("One or more user IDs are invalid.")
+        request_email = request.user.email
+        if request_email in emails:
+            raise serializers.ValidationError("You cannot add yourself to the list of participant_emails.")
 
-        return value
+        return emails
 
     def create(self, validated_data):
-        participant_ids = validated_data.pop('participant_ids')
-        request = self.context.get('request')
-
-        # Create conversation
+        emails = validated_data.pop('participant_emails')
+        request = self.context['request']
+        
+        # 1. Create the Conversation
         conversation = Conversation.objects.create()
 
-        # Add participants via through model
-        participants_to_add = []
-        for user_id in participant_ids:
-            user = User.objects.get(user_id=user_id)
-            participants_to_add.append(
-                ConversationParticipant(conversation=conversation, user=user)
-            )
-        ConversationParticipant.objects.bulk_create(participants_to_add)
+        # 2. Prepare users list (start with creator)
+        users_to_add = [request.user]
+
+        # 3. Fetch and add invited users
+        for email in emails:
+            try:
+                user = User.objects.get(email=email)
+                if user.pk != request.user.pk: 
+                     users_to_add.append(user)
+            except User.DoesNotExist:
+                raise serializers.ValidationError(f"No user with email: {email}")
+
+        # 4. Bulk Create Participant Links
+        ConversationParticipant.objects.bulk_create([
+            ConversationParticipant(conversation=conversation, user=user)
+            for user in users_to_add
+        ])
 
         return conversation

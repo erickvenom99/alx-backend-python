@@ -7,66 +7,45 @@ from django.core.validators import MinLengthValidator
 
 class User(AbstractUser):
     """
-    Custom User model extending AbstractUser.
-    Replaces the default Django User.
+    Custom User with UUID primary key — THE CORRECT WAY
     """
-    user_id = models.UUIDField(
+    id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
         editable=False,
         db_index=True
     )
-    first_name = models.CharField(max_length=150, blank=False, null=False)
-    last_name = models.CharField(max_length=150, blank=False, null=False)
-    email = models.EmailField(
-        unique=True,
-        blank=False,
-        null=False,
-        db_index=True,
-        error_messages={'unique': 'A user with that email already exists.'}
-    )
+    
+    # Remove your old 'user_id' field completely
+    # → Just rename it to 'id'
+
+    email = models.EmailField(unique=True, db_index=True)
+    first_name = models.CharField(max_length=150)
+    last_name = models.CharField(max_length=150)
     phone_number = models.CharField(max_length=15, blank=True, null=True)
-    ROLE_CHOICES = [
-        ('guest', 'Guest'),
-        ('host', 'Host'),
-        ('admin', 'Admin'),
-    ]
-    role = models.CharField(
-        max_length=10,
-        choices=ROLE_CHOICES,
-        default='guest',
-        blank=False,
-        null=False
-    )
+    
+    ROLE_CHOICES = [('guest', 'Guest'), ('host', 'Host'), ('admin', 'Admin')]
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='guest')
+    
     created_at = models.DateTimeField(auto_now_add=True)
-    password = models.CharField(max_length=128, blank=False, null=False)
+
+    # Fix related_name conflicts
     groups = models.ManyToManyField(
-        Group,
-        related_name='chats_user_set',  # ← Unique name
-        blank=True,
-        help_text='The groups this user belongs to.',
+        'auth.Group',
+        related_name='chats_user_groups',
+        blank=True
     )
     user_permissions = models.ManyToManyField(
-        Permission,
-        related_name='chats_user_permissions_set',  # ← Unique name
-        blank=True,
-        help_text='Specific permissions for this user.',
+        'auth.Permission',
+        related_name='chats_user_permissions',
+        blank=True
     )
 
-    # Required for Django auth
-    username = None  # We use email as identifier
-    USERNAME_FIELD = 'email'
-    REQUIRED_FIELDS = ['first_name', 'last_name']
-
-    class Meta:
-        db_table = 'user'
-        indexes = [
-            models.Index(fields=['email']),
-        ]
+    USERNAME_FIELD = 'username'
+    REQUIRED_FIELDS = ['email', 'first_name', 'last_name']
 
     def __str__(self):
-        return f"{self.get_full_name()} ({self.email})"
-
+        return self.email
 
 class Conversation(models.Model):
     """
@@ -76,12 +55,13 @@ class Conversation(models.Model):
         primary_key=True,
         default=uuid.uuid4,
         editable=False,
-        db_index=True
+        db_index=True,
+        
     )
     participants = models.ManyToManyField(
         User,
         related_name='conversations',
-        through='ConversationParticipant'
+        through='ConversationParticipant',
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -102,7 +82,7 @@ class ConversationParticipant(models.Model):
     Allows additional fields later (e.g., joined_at, is_admin).
     """
     conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='conversation_participations')
     joined_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -124,13 +104,13 @@ class Message(models.Model):
         primary_key=True,
         default=uuid.uuid4,
         editable=False,
-        db_index=True
+        db_index=True,
     )
     sender = models.ForeignKey(
         User,
         on_delete=models.CASCADE,
         related_name='sent_messages',
-        db_index=True
+        db_index=True,
     )
     conversation = models.ForeignKey(
         Conversation,
