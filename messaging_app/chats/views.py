@@ -10,14 +10,15 @@ from .serializers import (
     ConversationCreateSerializer,
     MessageSerializer,
 )
-# 1. Import all custom permissions
-from .permissions import IsMessageSender, IsParticipantOfConversation 
+# 1. Import the newly defined custom permission
+from .permissions import IsParticipantOfConversation 
 
 # Alias PermissionDenied for convenience
 PermissionDenied = exceptions.PermissionDenied
 
 class ConversationViewSet(viewsets.ViewSet):
-    # This ViewSet uses the URL structure to ensure the user is a participant
+    # Standard authentication check is sufficient for list/create 
+    # (Global default IsAuthenticated will also be active from settings.py)
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['created_at']
@@ -25,7 +26,6 @@ class ConversationViewSet(viewsets.ViewSet):
     ordering_fields = ['created_at']
     ordering = ['-created_at']
     
-    # We implement filter_queryset to allow the use of filter_backends on a custom queryset
     def filter_queryset(self, queryset):
         for backend in list(self.filter_backends):
             queryset = backend().filter_queryset(self.request, queryset, self)
@@ -33,6 +33,7 @@ class ConversationViewSet(viewsets.ViewSet):
 
     def list(self, request):
         user = request.user
+        # Queryset already filters to only show conversations the user participates in
         queryset = Conversation.objects.filter(participants=user)
         queryset = self.filter_queryset(queryset)
         queryset = queryset.prefetch_related('participants', 'messages__sender')
@@ -50,114 +51,49 @@ class ConversationViewSet(viewsets.ViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     def retrieve(self, request, pk=None):
-        conversation = get_object_or_404(Conversation, pk=pk) # Assuming primary key is just 'pk'
-        # Explicit check for participation
-        # NOTE: This manual check is still needed here since IsParticipantOfConversation isn't applied to this ViewSet
-        if not conversation.participants.filter(user=request.user).exists():
-            return Response({"detail": "Not authorized."}, status=status.HTTP_403_FORBIDDEN)
+        conversation = get_object_or_404(Conversation, pk=pk)
+        
+        # Explicit M2M check for participation in this specific conversation
+        if not conversation.participants.filter(pk=request.user.pk).exists():
+            return Response({"detail": "Not authorized to view this conversation."}, status=status.HTTP_403_FORBIDDEN)
+            
         serializer = ConversationSerializer(conversation)
         return Response(serializer.data)
 
 
-class MessageViewSet(viewsets.ViewSet):
+class MessageViewSet(viewsets.ModelViewSet):
+    """
+    A ViewSet for viewing and editing Message instances associated with a specific Conversation.
     
-    # REMOVED: Replaced with get_permissions for conditional access
-    # permission_classes = [IsAuthenticated, IsMessageSender] 
+    The IsParticipantOfConversation class enforces that only authenticated participants
+    can interact with the messages within the conversation specified by conversation_id.
+    """
+    serializer_class = MessageSerializer
+    
+    # Apply the custom permission to enforce access control (only participants can interact)
+    permission_classes = [IsParticipantOfConversation] 
 
-    def get_permissions(self):
-        """
-        Instantiates and returns the list of permissions required for the action.
-        Uses IsParticipantOfConversation for all access, and adds IsMessageSender 
-        specifically for the 'destroy' action.
-        """
-        # All message actions require the user to be a participant of the parent conversation
-        permission_classes = [IsParticipantOfConversation]
+    def get_queryset(self):
+        conversation_id = self.kwargs.get('conversation_id')
         
-        if self.action == 'destroy':
-            # Only the sender can delete the message
-            permission_classes.append(IsMessageSender)
+        if conversation_id:
+            # Filter the Message objects to show only messages in that conversation, ordered by timestamp
+            return Message.objects.filter(conversation__id=conversation_id).order_by('timestamp')
         
-        # Only check if the user is authenticated globally (via settings.py), 
-        # IsParticipantOfConversation covers the rest.
-        
-        return [permission() for permission in permission_classes]
-
-    def get_conversation(self):
-        """
-        Retrieves the conversation based on the URL argument (conversation_pk).
-        NOTE: The explicit check for user participation has been REMOVED here, 
-        as it is now handled by IsParticipantOfConversation in get_permissions.
-        """
-        conversation_pk = self.kwargs.get('conversation_pk')
-        try:
-            conversation = Conversation.objects.get(pk=conversation_pk)
-        except Conversation.DoesNotExist:
-            raise exceptions.NotFound(detail="Conversation not found.")
-        
-        return conversation
-
-    # Helper method to get the message instance needed for IsMessageSender permission
-    def get_object(self):
-        """Retrieves the specific message instance."""
-        message_pk = self.kwargs.get('pk')
-        message = get_object_or_404(Message, pk=message_pk)
-        
-        # Apply permission check here (this triggers IsMessageSender for the destroy action)
-        self.check_object_permissions(self.request, message)
-        return message
+        # If no conversation ID is present, return an empty queryset
+        return Message.objects.none()
 
     def perform_create(self, serializer):
-        """
-        Creates the message, linking it to the conversation and the sender.
-        """
-        conversation = self.get_conversation()
-        serializer.save(sender=self.request.user, conversation=conversation)
+        conversation_id = self.kwargs.get('conversation_id')
         
-    def filter_queryset(self, queryset):
-        """Stub for filter_queryset required if filter_backends were used."""
-        return queryset
-
-
-    # LIST: Get all messages in a conversation
-    def list(self, request, conversation_pk=None):
-        # Access is checked by IsParticipantOfConversation before this method runs
-        conversation = self.get_conversation() 
-        messages = conversation.messages.select_related('sender').order_by('timestamp')
-        messages = self.filter_queryset(messages)
-        serializer = MessageSerializer(messages, many=True)
-        return Response(serializer.data)
-
-    # CREATE: Send a new message
-    def create(self, request, conversation_pk=None):
-        # Access is checked by IsParticipantOfConversation before this method runs
-        conversation = self.get_conversation() 
-        
-        serializer = MessageSerializer(data=request.data, context={'request': request})
-        if serializer.is_valid():
-            message = serializer.save(sender=request.user, conversation=conversation)
-            return Response(MessageSerializer(message).data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    # RETRIEVE: Get a single message
-    def retrieve(self, request, pk=None, conversation_pk=None):
-        # NOTE: get_object() automatically triggers the object permissions check
-        message = self.get_object() 
-        serializer = MessageSerializer(message)
-        return Response(serializer.data)
-
-    # UPDATE: Update a message (must be sender)
-    def update(self, request, pk=None, conversation_pk=None):
-        # NOTE: get_object() automatically triggers the object permissions check (IsMessageSender)
-        message = self.get_object() 
-        serializer = MessageSerializer(message, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-    # DESTROY: Delete a message (must be sender)
-    def destroy(self, request, pk=None, conversation_pk=None):
-        # NOTE: get_object() automatically triggers the object permissions check (IsMessageSender)
-        message = self.get_object() 
-        message.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        # Retrieve the Conversation instance
+        try:
+            conversation = Conversation.objects.get(pk=conversation_id)
+        except Conversation.DoesNotExist:
+            raise serializer.ValidationError("Invalid conversation ID.")
+            
+        # Save the message, linking it to the conversation and the current user
+        serializer.save(
+            sender=self.request.user, 
+            conversation=conversation
+        )
