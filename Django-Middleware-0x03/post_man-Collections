@@ -1,0 +1,460 @@
+{
+	"info": {
+		"_postman_id": "a1b2c3d4-e5f6-7890-1234-abcdef012345",
+		"name": "ALX Messaging App - Auth & Permissions",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"description": "Tests for Authentication (JWT), Conversation Flow, Pagination, Filtering, and Unauthorized Access (403 checks) for the messaging_app project."
+	},
+	"item": [
+		{
+			"name": "Folder 1: Authentication",
+			"item": [
+				{
+					"name": "1. Login User A (Primary Participant)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"usera@test.com\", \n    \"password\": \"password\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/token/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"token",
+								""
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.environment.set(\"JWT_A\", jsonData.access);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "2. Login User C (Unauthorized Third Party)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"userc@test.com\", \n    \"password\": \"password\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/token/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"token",
+								""
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.environment.set(\"JWT_C\", jsonData.access);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Folder 2: Core Flow & Pagination (User A)",
+			"item": [
+				{
+					"name": "1. Create Conversation (A & B)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/conversations/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"conversations",
+								""
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"participants_emails\": [\"userb@test.com\"]\n}"
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{JWT_A}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201 Created\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.environment.set(\"CONV_ID_AB\", jsonData.conversation_id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "2. Send Message",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/conversations/{{CONV_ID_AB}}/messages/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"conversations",
+								"{{CONV_ID_AB}}",
+								"messages",
+								""
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"message_body\": \"This is the first test message.\"\n}"
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{JWT_A}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201 Created\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.environment.set(\"MSG_ID_1\", jsonData.id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "3. Fetch Messages (List & Pagination Check)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/conversations/{{CONV_ID_AB}}/messages/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"conversations",
+								"{{CONV_ID_AB}}",
+								"messages",
+								""
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{JWT_A}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"var jsonData = pm.response.json();",
+									"pm.test(\"Response is Paginated\", function() {",
+									"    pm.expect(jsonData).to.have.property('count');",
+									"    pm.expect(jsonData).to.have.property('results');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "4. Test Filtering (Time Range)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/conversations/{{CONV_ID_AB}}/messages/?timestamp_after=2025-11-01T00:00:00Z",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"conversations",
+								"{{CONV_ID_AB}}",
+								"messages",
+								""
+							],
+							"query": [
+								{
+									"key": "timestamp_after",
+									"value": "2025-11-01T00:00:00Z"
+								}
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{JWT_A}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200 OK and Filtering is active\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Folder 3: Permissions Check (User C - Unauthorized)",
+			"item": [
+				{
+					"name": "1. Unauthorized Retrieve Conversation (403)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/conversations/{{CONV_ID_AB}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"conversations",
+								"{{CONV_ID_AB}}",
+								""
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{JWT_C}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 403 Forbidden\", function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "2. Unauthorized Fetch Messages List (403)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/conversations/{{CONV_ID_AB}}/messages/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"conversations",
+								"{{CONV_ID_AB}}",
+								"messages",
+								""
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{JWT_C}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 403 Forbidden\", function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				},
+				{
+					"name": "3. Unauthorized Update Message (403)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"message_body\": \"Attempt to hack message\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/conversations/{{CONV_ID_AB}}/messages/{{MSG_ID_1}}/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"conversations",
+								"{{CONV_ID_AB}}",
+								"messages",
+								"{{MSG_ID_1}}",
+								""
+							]
+						},
+						"auth": {
+							"type": "bearer",
+							"bearer": [
+								{
+									"key": "token",
+									"value": "{{JWT_C}}",
+									"type": "string"
+								}
+							]
+						}
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 403 Forbidden\", function () {",
+									"    pm.response.to.have.status(403);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					]
+				}
+			]
+		}
+	],
+	"protocolProfileBehavior": {}
+}
