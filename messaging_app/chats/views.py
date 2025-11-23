@@ -1,10 +1,12 @@
-from rest_framework import viewsets, status, filters, exceptions
+from rest_framework import viewsets, filters, status, exceptions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
 from .models import Conversation, Message, ConversationParticipant
+from .pagination import MessagePagination
+from .filters import MessageFilter
 from .serializers import (
     ConversationSerializer,
     ConversationCreateSerializer,
@@ -72,6 +74,9 @@ class MessageViewSet(viewsets.ModelViewSet):
     
     # Apply the custom permission to enforce access control (only participants can interact)
     permission_classes = [IsParticipantOfConversation] 
+    pagination_class = MessagePagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = MessageFilter
 
     def get_queryset(self):
         conversation_id = self.kwargs.get('conversation_id')
