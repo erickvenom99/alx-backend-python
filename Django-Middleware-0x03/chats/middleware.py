@@ -120,3 +120,41 @@ class OffensiveLanguageMiddleware(MiddlewareMixin):
         else:
             ip = request.META.get('REMOTE_ADDR', '127.0.0.1')
         return ip
+
+class RolepermissionMiddleware(MiddlewareMixin):
+    """
+    Blocks access to admin-only paths if user is not admin or moderator
+    ALX expects exact class name: RolepermissionMiddleware (no space)
+    """
+    def __call__(self, request):
+        # Define admin-only paths
+        admin_paths = [
+            '/admin/',
+            '/chats/admin/',
+            '/api/admin/',
+            '/chats/delete/',      # example
+            '/chats/ban/',         # example
+        ]
+
+        # Check if current path requires admin role
+        if any(request.path.startswith(path) for path in admin_paths):
+            user = request.user
+
+            # Allow unauthenticated users to reach login page
+            if not user.is_authenticated:
+                return JsonResponse({
+                    "detail": "Authentication required for admin access."
+                }, status=403)
+
+            # Check user's role from your custom User model
+            # Adjust this line based on your User.role field
+            user_role = getattr(user, 'role', 'guest').lower()
+
+            if user_role not in ['admin', 'moderator']:
+                return JsonResponse({
+                    "detail": "You do not have permission to perform this action."
+                }, status=403)
+
+        # Allow normal access
+        response = self.get_response(request)
+        return response
