@@ -4,6 +4,13 @@ import os
 from datetime import datetime, time
 from django.conf import settings
 from django.http import HttpRequest, JsonResponse
+from collections import defaultdict
+from django.http import JsonResponse
+from django.utils.deprecation import MiddlewareMixin
+
+_IP_MESSAGE_HISTORY = defaultdict(list)
+MAX_MESSAGES = 5        # Max messages allowed
+TIME_WINDOW = 60
 
 # ========================
 # 1. Request Logging Middleware (keep it – it works great)
@@ -66,3 +73,50 @@ class RestrictAccessByTimeMiddleware:
 
         # Allowed → continue to view (or 404 if no view exists – that's fine)
         return self.get_response(request)
+
+
+class OffensiveLanguageMiddleware(MiddlewareMixin):
+    """
+    Rate limits message sending: 5 messages per minute per IP address
+    Task requires this class name exactly → OffensiveLanguageMiddleware
+    """
+    def __call__(self, request):
+        # Only apply to POST requests on message-related paths
+        if (request.method == "POST" and 
+            request.path.startswith(('/chats/', '/api/', '/messages/'))):
+            
+            ip = self.get_client_ip(request)
+            
+            now = time.time()
+            one_minute_ago = now - TIME_WINDOW
+
+            # Clean old messages outside the time window
+            if ip in _IP_MESSAGE_HISTORY:
+                _IP_MESSAGE_HISTORY[ip] = [
+                    timestamp for timestamp in _IP_MESSAGE_HISTORY[ip]
+                    if timestamp > one_minute_ago
+                ]
+            else:
+                _IP_MESSAGE_HISTORY[ip] = []
+
+            # Check if limit exceeded
+            if len(_IP_MESSAGE_HISTORY[ip]) >= MAX_MESSAGES:
+                return JsonResponse({
+                    "detail": "Rate limit exceeded. You can only send 5 messages per minute."
+                }, status=429)  # 429 Too Many Requests
+
+            # Allow request and record this message
+            _IP_MESSAGE_HISTORY[ip].append(now)
+
+        # Allow request to continue
+        response = self.get_response(request)
+        return response
+
+    def get_client_ip(self, request):
+        """Get real IP even behind proxy"""
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            ip = x_forwarded_for.split(',')[0]
+        else:
+            ip = request.META.get('REMOTE_ADDR', '127.0.0.1')
+        return ip
