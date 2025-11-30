@@ -28,7 +28,9 @@ def inbox_view(request):
 @login_required
 def inbox_view(request):
     # ←←←←← THIS IS WHAT THE TASK WANTS ←←←←←
-    messages = Message.unread.for_user(request.user)  # Only unread + optimized!
+    messages = Message.unread.unread_for_user(request.user)\
+                             .only('sender', 'content', 'timestamp')\
+                             .select_related('sender') # Only unread + optimized!
 
     return render(request, 'messaging/inbox.html', {
         'messages': messages,
