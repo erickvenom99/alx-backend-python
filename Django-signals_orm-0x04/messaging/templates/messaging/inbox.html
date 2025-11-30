@@ -1,0 +1,37 @@
+!DOCTYPE html>
+<html>
+<head>
+    <title>My Inbox</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .message { border: 1px solid #ccc; padding: 15px; margin: 20px 0; border-radius: 8px; }
+        .reply { margin-left: 50px; background: #f8f9fa; padding: 10px; border-left: 4px solid #007bff; }
+    </style>
+</head>
+<body>
+    <h1>Your Inbox</h1>
+    <a href="/admin/">Admin</a> | <a href="/admin/auth/user/add/">Add User</a>
+
+    {% for msg in messages %}
+        <div class="message">
+            <strong>From:</strong> {{ msg.sender.username }}<br>
+            <strong>Message:</strong> {{ msg.content }}<br>
+            <small>{{ msg.timestamp }}</small>
+
+            {% if msg.replies.all %}
+                <div style="margin-top: 15px;">
+                    <strong>Replies:</strong>
+                    {% for reply in msg.replies.all %}
+                        <div class="reply">
+                            <strong>{{ reply.sender.username }}:</strong> {{ reply.content }}
+                            <small>({{ reply.timestamp|timesince }} ago)</small>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    {% empty %}
+        <p>No messages yet. Go to <a href="/admin/">admin</a> and create some!</p>
+    {% endfor %}
+</body>
+</html>
