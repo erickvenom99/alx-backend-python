@@ -1,4 +1,5 @@
 from rest_framework import viewsets, filters, status, exceptions
+from rest_framework.exceptions import ValidationError
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -80,6 +81,7 @@ class MessageViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         conversation_id = self.kwargs.get('conversation_id')
+
         
         if conversation_id:
             # Filter the Message objects to show only messages in that conversation, ordered by timestamp
@@ -89,16 +91,26 @@ class MessageViewSet(viewsets.ModelViewSet):
         return Message.objects.none()
 
     def perform_create(self, serializer):
-        conversation_id = self.kwargs.get('conversation_id')
-        
+        # Retrieve the conversation ID using the router's generated name: 'conversation' + '_pk'
+        conversation_id = self.kwargs.get('conversation_pk') 
+
+        # If the ID is somehow missing, raise an error
+        if not conversation_id:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError("Conversation ID is missing from URL.")
+
         # Retrieve the Conversation instance
         try:
+            from .models import Conversation # Assuming Conversation model is here
             conversation = Conversation.objects.get(pk=conversation_id)
         except Conversation.DoesNotExist:
-            raise serializer.ValidationError("Invalid conversation ID.")
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError("Invalid conversation ID.") 
             
-        # Save the message, linking it to the conversation and the current user
+        # Save the message with the correct context
         serializer.save(
             sender=self.request.user, 
             conversation=conversation
+            # Note: The actual message content must be mapped from the 'message_body' field
+            # The serializer should handle mapping 'message_body' to the model's content field.
         )
