@@ -4,7 +4,6 @@ WORKDIR /usr/src/app
 
 COPY requirements.txt ./
 
-# This line is bulletproof – fast mirror + long timeout + retries
 RUN pip install --no-cache-dir \
     --timeout=1000 \
     --retries=20 \
@@ -16,4 +15,4 @@ COPY . .
 
 EXPOSE 8000
 
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+CMD ["python3", "manage.py", "runserver", "0.0.0.0:8000"]
