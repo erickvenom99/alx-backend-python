@@ -16,6 +16,7 @@ services:
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DB: ${MYSQL_DATABASE}
     volumes:
       # Persist data outside the container (optional but recommended)
       - db_data:/var/lib/mysql
@@ -40,6 +41,7 @@ services:
       - .env
     ports:
       - "8000:8000"
+    command: python3 manage.py runserver 0.0.0.0:8000
     # Ensure the web service starts only after the DB is healthy
     depends_on:
       db:
