@@ -1,0 +1,30 @@
+# messaging_app/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: django-app-ingress
+  annotations:
+    # Use the Nginx Ingress class
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    kubernetes.io/ingress.class: "nginx"
+spec:
+  rules:
+  - host: my-django-app.local # Replace with a domain name you can map locally (e.g., via /etc/hosts)
+    http:
+      paths:
+      # 1. Route for the API (e.g., /api/login)
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: django-app-service # Your Django service name
+            port:
+              number: 8000
+      # 2. Default route for the rest of the application (e.g., /admin, homepage)
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: django-app-service # Your Django service name
+            port:
+              number: 8000
