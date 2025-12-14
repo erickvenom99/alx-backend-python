@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: django-app-service
+spec:
+  selector:
+    app: django-app
+    version: blue # <-- The Service initially routes traffic to the BLUE deployment
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 8000
+    name: http
+  type: LoadBalancer # Or ClusterIP if you are using Ingress

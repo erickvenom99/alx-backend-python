@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+
+# File: messaging_app/kubctl-0x02
+
+BLUE_DEPLOYMENT="django-app-blue"
+GREEN_DEPLOYMENT="django-app-green"
+SERVICE_FILE="kubeservice.yaml"
+
+# --- Function to check for kubectl availability ---
+check_kubectl() {
+    if ! command -v kubectl &> /dev/null; then
+        echo "🚨 ERROR: kubectl is not installed or not in PATH." >&2
+        exit 1
+    fi
+}
+
+# 1. Deploy the Blue and Green Versions
+deploy_versions() {
+    echo "--- 1. Deploying BLUE (stable) and GREEN (new) deployments..."
+    
+    # Deploy Blue (ensures stable version is running)
+    kubectl apply -f blue_deployment.yaml
+    
+    # Deploy Green (the new version)
+    kubectl apply -f green_deployment.yaml
+    
+    # Wait for the green pods to be ready
+    echo "Waiting for green deployment pods to be ready..."
+    kubectl wait --for=condition=available deployment/$GREEN_DEPLOYMENT --timeout=60s
+    
+    if [ $? -ne 0 ]; then
+        echo "🚨 ERROR: Green deployment failed to become ready." >&2
+        exit 1
+    fi
+    echo "✅ Deployments applied and green version is ready."
+}
+
+# 2. Deploy/Update the Service (to ensure traffic is directed to BLUE initially)
+deploy_service() {
+    echo "--- 2. Applying Service configuration (pointing to BLUE)..."
+    kubectl apply -f $SERVICE_FILE
+    echo "✅ Service applied."
+}
+
+# 3. Check Logs for the New (Green) Version
+check_green_logs() {
+    echo "--- 3. Checking logs for the new (GREEN) deployment for errors..."
+    
+    # Find the name of the first green pod
+    GREEN_POD=$(kubectl get pods -l version=green -o jsonpath='{.items[0].metadata.name}')
+    
+    if [ -z "$GREEN_POD" ]; then
+        echo "🚨 ERROR: Could not find any running GREEN pods to check logs." >&2
+        return 1
+    fi
+
+    echo "Fetching logs from pod: $GREEN_POD"
+    
+    # Use kubectl logs to output the last 20 lines of logs
+    kubectl logs $GREEN_POD --tail=20
+    
+    echo "✅ Log check complete. Review output above for errors."
+}
+
+## --- Main Execution ---
+main() {
+    check_kubectl
+    deploy_versions
+    echo ""
+    deploy_service
+    echo ""
+    check_green_logs
+    echo ""
+    echo "Deployment prepared. Next step: manually test GREEN version, then edit service selector to switch traffic."
+}
+
+# Execute the main function
+main
