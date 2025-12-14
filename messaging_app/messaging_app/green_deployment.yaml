@@ -1,0 +1,26 @@
+# messaging_app/green_deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-app-green
+  labels:
+    app: django-app
+    version: green # <-- KEY: Identifies the new version
+spec:
+  replicas: 2 # Set to 0 or 1 initially, then scale up
+  selector:
+    matchLabels:
+      app: django-app
+      version: green
+  template:
+    metadata:
+      labels:
+        app: django-app
+        version: green
+    spec:
+      containers:
+      - name: django-app
+        image: <YOUR_DJANGO_IMAGE>:<GREEN_VERSION_TAG> # e.g., my-django-image:v1.1 (the new code)
+        ports:
+        - containerPort: 8000
+        # ... other configurations
