@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+
+# File: messaging_app/kubctl-0x01
+
+# --- Configuration ---
+# 🚨 IMPORTANT: Replace 'django-app-deployment' with the actual name of your Kubernetes Deployment.
+DEPLOYMENT_NAME="django-app-deployment" 
+REPLICAS_COUNT=3
+SERVICE_NAME="django-app-service"
+
+# Check if the required tools (kubectl and wrk) are available
+check_prerequisites() {
+    if ! command -v kubectl &> /dev/null; then
+        echo "🚨 ERROR: kubectl is not installed or not in PATH." >&2
+        exit 1
+    fi
+    if ! command -v wrk &> /dev/null; then
+        echo "🚨 ERROR: wrk (load testing tool) is not installed or not in PATH." >&2
+        echo "Install wrk before running this script." >&2
+        exit 1
+    fi
+}
+
+# 1. Scale the Deployment
+scale_app() {
+    echo "--- 1. Scaling deployment '$DEPLOYMENT_NAME' to $REPLICAS_COUNT replicas..."
+    
+    # Use kubectl scale to set the desired number of replicas.
+    kubectl scale deployment $DEPLOYMENT_NAME --replicas=$REPLICAS_COUNT
+    
+    if [ $? -ne 0 ]; then
+        echo "🚨 ERROR: Failed to scale deployment. Check if the deployment name is correct." >&2
+        exit 1
+    fi
+    
+    echo "Waiting for pods to be ready (up to 30 seconds)..."
+    # Wait for the deployment to become fully available
+    kubectl wait --for=condition=available deployment/$DEPLOYMENT_NAME --timeout=30s
+    echo "✅ Scaling complete."
+}
+
+# 2. Verify Pods
+verify_pods() {
+    echo "--- 2. Verifying that $REPLICAS_COUNT pods are running..."
+    # 'kubectl get pods' lists the current pods and their status.
+    kubectl get pods -l app=$DEPLOYMENT_NAME
+    echo "✅ Pod verification successful."
+}
+
+# 3. Perform Load Testing with wrk
+load_test() {
+    echo "--- 3. Performing load testing using 'wrk'..."
+    
+    # Minikube provides the cluster IP and port for external access.
+    # We must first get the service URL.
+    SERVICE_URL=$(minikube service $SERVICE_NAME --url)
+    
+    if [ -z "$SERVICE_URL" ]; then
+        echo "🚨 ERROR: Could not determine service URL. Is the service '$SERVICE_NAME' running?" >&2
+        exit 1
+    fi
+    
+    echo "Load testing target URL: $SERVICE_URL"
+    
+    # wrk command: 5 threads, 10 connections, run for 10 seconds.
+    # This generates enough load to stress the application and see the effect of scaling.
+    wrk -t5 -c10 -d10s "$SERVICE_URL"
+    
+    echo "✅ Load test finished."
+}
+
+# 4. Monitor Resource Usage
+monitor_resources() {
+    echo "--- 4. Monitoring Resource Usage using 'kubectl top'..."
+    # 'kubectl top' requires the Metrics Server to be running (usually enabled by default in Minikube).
+    # We retrieve the resource usage for the running pods.
+    kubectl top pods -l app=$DEPLOYMENT_NAME --containers
+    
+    echo "✅ Resource usage displayed."
+}
+
+## --- Main Execution ---
+main() {
+    check_prerequisites
+    scale_app
+    echo ""
+    verify_pods
+    echo ""
+    load_test
+    echo ""
+    monitor_resources
+    echo ""
+    echo "🎉 Scaling, testing, and monitoring cycle complete."
+}
+
+# Execute the main function
+main
