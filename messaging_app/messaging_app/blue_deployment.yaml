@@ -1,0 +1,56 @@
+# messaging_app/blue_deployment.yaml
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-app-blue
+  labels:
+    app: django-app
+    version: blue
+spec:
+  # The number of stable replicas to maintain
+  replicas: 2 
+  
+  # Strategy for updating the deployment
+  strategy:
+    type: RollingUpdate 
+    rollingUpdate:
+      # Allows one extra pod to be created beyond the desired replica count during the update
+      maxSurge: 1       
+      # Requires that zero pods be unavailable during the update (zero downtime)
+      maxUnavailable: 0 
+      
+  # Selector links this Deployment to the Pods with the specified labels
+  selector:
+    matchLabels:
+      app: django-app
+      version: blue
+      
+  # Template defines the desired state of the Pods created by this Deployment
+  template:
+    metadata:
+      labels:
+        app: django-app
+        version: blue
+    spec:
+      containers:
+      - name: django-app
+        # **UPDATED IMAGE VERSION FOR ROLLING UPDATE**
+        image: <YOUR_DJANGO_IMAGE>:v2.0 
+        ports:
+        - containerPort: 8000
+        
+        # --- Liveness and Readiness Probes (Highly recommended for Rolling Updates) ---
+        # NOTE: You should include actual probe configurations here if your base deployment had them.
+        # livenessProbe:
+        #   httpGet:
+        #     path: /healthz
+        #     port: 8000
+        #   initialDelaySeconds: 5
+        #   periodSeconds: 5
+        # readinessProbe:
+        #   httpGet:
+        #     path: /ready
+        #     port: 8000
+        #   initialDelaySeconds: 5
+        #   periodSeconds: 5
